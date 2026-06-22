@@ -1,0 +1,18 @@
+{
+  "name": "sync-canvas-server",
+  "version": "1.0.0",
+  "description": "SyncCanvas WebSocket sync server — real-time collaborative whiteboard backend",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --experimental-vm-modules test/sync.test.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "uuid": "^9.0.0"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
