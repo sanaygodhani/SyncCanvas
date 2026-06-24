@@ -1,0 +1,8 @@
+#!/bin/sh
+# Auto-push hook — runs after every commit
+# Ensures every code change is immediately pushed to GitHub
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "feat/"* ]; then
+  git push origin "$BRANCH" 2>/dev/null &
+fi
