@@ -1,134 +1,189 @@
+import { supabase } from './lib/supabase.js';
+
 /**
- * sync-canvas — In-Memory Element Store
+ * sync-canvas — Database Store (Supabase)
  *
- * Maintains the canonical element state per room using a Map.
+ * Persists whiteboard elements to PostgreSQL.
  * Provides CRUD operations that the sync-engine applies ops against.
- * The store is the single source of truth for board state within a single server process.
  */
-
-// Room elements stored as Map<roomId, Map<elementId, Element>>
-const roomElements = new Map();
 
 /**
- * Initialize a room's element store if it doesn't exist.
- * @param {string} roomId
+ * Initialize a room (no-op for database, maybe ensure channel exists?)
+ * @param {string} roomId (channel_id)
  */
-export function initRoom(roomId) {
-  if (!roomElements.has(roomId)) {
-    roomElements.set(roomId, new Map());
-  }
+export async function initRoom(roomId) {
+  // In a real app, we might verify the channel exists in the 'channels' table.
 }
 
 /**
- * Get all elements for a room (as a plain array for serialization).
- * @param {string} roomId
- * @returns {Element[]}
+ * Get all elements for a room.
+ * @param {string} roomId (channel_id)
+ * @returns {Promise<Element[]>}
  */
-export function getElements(roomId) {
-  const elements = roomElements.get(roomId);
-  if (!elements) return [];
-  return Array.from(elements.values());
+export async function getElements(roomId) {
+  const { data, error } = await supabase
+    .from('whiteboard_elements')
+    .select('*')
+    .eq('channel_id', roomId)
+    .eq('is_deleted', false);
+
+  if (error) {
+    console.error(`[store] Error fetching elements for room ${roomId}:`, error.message);
+    return [];
+  }
+
+  // Map database fields back to the format expected by the client
+  return data.map(item => ({
+    id: item.id,
+    type: item.type,
+    x: item.x,
+    y: item.y,
+    width: item.width,
+    height: item.height,
+    rotation: item.rotation,
+    props: item.props,
+    points: item.points,
+    content: item.content,
+    createdBy: item.created_by,
+    updatedAt: new Date(item.updated_at).getTime(),
+    version: item.version,
+  }));
 }
 
 /**
  * Get a single element by ID.
  * @param {string} roomId
  * @param {string} elementId
- * @returns {Element|null}
+ * @returns {Promise<Element|null>}
  */
-export function getElement(roomId, elementId) {
-  const elements = roomElements.get(roomId);
-  if (!elements) return null;
-  return elements.get(elementId) || null;
+export async function getElement(roomId, elementId) {
+  const { data, error } = await supabase
+    .from('whiteboard_elements')
+    .select('*')
+    .eq('channel_id', roomId)
+    .eq('id', elementId)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    type: data.type,
+    x: data.x,
+    y: data.y,
+    width: data.width,
+    height: data.height,
+    rotation: data.rotation,
+    props: data.props,
+    points: data.points,
+    content: data.content,
+    createdBy: data.created_by,
+    updatedAt: new Date(data.updated_at).getTime(),
+    version: data.version,
+    isDeleted: data.is_deleted
+  };
 }
 
 /**
  * Add an element to the store.
- * Throws if elementId already exists (use updateElement instead).
  * @param {string} roomId
  * @param {Element} element
  */
-export function addElement(roomId, element) {
-  initRoom(roomId);
-  const elements = roomElements.get(roomId);
+export async function addElement(roomId, element) {
+  const { error } = await supabase
+    .from('whiteboard_elements')
+    .insert([{
+      id: element.id,
+      channel_id: roomId,
+      type: element.type,
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+      rotation: element.rotation || 0,
+      props: element.props || {},
+      points: element.points || [],
+      content: element.content,
+      created_by: element.createdBy,
+      version: 1,
+      updated_at: new Date(element.updatedAt || Date.now()).toISOString()
+    }]);
 
-  if (elements.has(element.id)) {
-    throw new Error(`Element ${element.id} already exists in room ${roomId}`);
+  if (error) {
+    throw new Error(`Failed to add element: ${error.message}`);
   }
-
-  elements.set(element.id, { ...element });
 }
 
 /**
- * Update an element in the store (partial merge).
- * Only fields present in `updates.data` are overwritten.
+ * Update an element in the store.
  * @param {string} roomId
  * @param {string} elementId
- * @param {Partial<Element>} data — partial element fields to merge
- * @returns {Element|null} The updated element, or null if not found
+ * @param {object} data — partial element fields to merge
  */
-export function updateElement(roomId, elementId, data) {
-  const elements = roomElements.get(roomId);
-  if (!elements) return null;
+export async function updateElement(roomId, elementId, data) {
+  // Better to fetch existing and merge if we want to preserve fields not in 'data'
+  // But for LWW, we can just update the provided fields.
+  
+  // Note: 'data' contains fields like x, y, props, points, updatedAt.
+  const updateData = {
+    updated_at: new Date(data.updatedAt || Date.now()).toISOString()
+  };
 
-  const existing = elements.get(elementId);
-  if (!existing) return null;
+  if (data.x !== undefined) updateData.x = data.x;
+  if (data.y !== undefined) updateData.y = data.y;
+  if (data.width !== undefined) updateData.width = data.width;
+  if (data.height !== undefined) updateData.height = data.height;
+  if (data.props !== undefined) updateData.props = data.props;
+  if (data.points !== undefined) updateData.points = data.points;
+  if (data.content !== undefined) updateData.content = data.content;
 
-  // Merge partial updates on top of existing element
-  const updated = { ...existing };
-  for (const [key, value] of Object.entries(data)) {
-    // Special merge for props (nested object)
-    if (key === 'props' && typeof value === 'object' && value !== null) {
-      updated.props = { ...(existing.props || {}), ...value };
-    } else {
-      updated[key] = value;
-    }
-  }
+  const { data: updated, error } = await supabase
+    .from('whiteboard_elements')
+    .update(updateData)
+    .eq('channel_id', roomId)
+    .eq('id', elementId)
+    .select()
+    .single();
 
-  elements.set(elementId, updated);
+  if (error) return null;
   return updated;
 }
 
 /**
- * Delete an element from the store.
+ * Delete an element (soft delete).
  * @param {string} roomId
  * @param {string} elementId
- * @returns {boolean} true if element was found and deleted
  */
-export function deleteElement(roomId, elementId) {
-  const elements = roomElements.get(roomId);
-  if (!elements) return false;
-  return elements.delete(elementId);
+export async function deleteElement(roomId, elementId) {
+  const { error } = await supabase
+    .from('whiteboard_elements')
+    .update({ is_deleted: true, updated_at: new Date().toISOString() })
+    .eq('channel_id', roomId)
+    .eq('id', elementId);
+
+  return !error;
 }
 
 /**
- * Check if an element exists in the store.
- * @param {string} roomId
- * @param {string} elementId
- * @returns {boolean}
+ * Check if an element exists.
  */
-export function hasElement(roomId, elementId) {
-  const elements = roomElements.get(roomId);
-  if (!elements) return false;
-  return elements.has(elementId);
+export async function hasElement(roomId, elementId) {
+  const { count, error } = await supabase
+    .from('whiteboard_elements')
+    .select('*', { count: 'exact', head: true })
+    .eq('channel_id', roomId)
+    .eq('id', elementId)
+    .eq('is_deleted', false);
+
+  return !error && count > 0;
 }
 
 /**
- * Remove all elements for a room (cleanup on room destruction).
- * @param {string} roomId
+ * Clear a room (soft delete all).
  */
-export function clearRoom(roomId) {
-  roomElements.delete(roomId);
-}
-
-/**
- * Get a snapshot of all room data (for debugging / metrics).
- * @returns {object}
- */
-export function getStoreSnapshot() {
-  const snapshot = {};
-  for (const [roomId, elements] of roomElements.entries()) {
-    snapshot[roomId] = Array.from(elements.values());
-  }
-  return snapshot;
+export async function clearRoom(roomId) {
+  await supabase
+    .from('whiteboard_elements')
+    .update({ is_deleted: true })
+    .eq('channel_id', roomId);
 }

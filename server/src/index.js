@@ -1,91 +1,85 @@
-/**
- * sync-canvas — Server Entry Point
- *
- * HTTP + WebSocket server for real-time collaborative whiteboarding.
- *
- * - HTTP serves a health-check endpoint at GET /health
- * - WebSocket handles: join, op (add/update/delete), cursor position
- * - CORS enabled for cross-origin clients (any origin allowed)
- *
- * Protocol: See 02-websocket-protocol.md for full message format.
- * Architecture: See 01-system-architecture.md for system design.
- */
-
-import { createServer } from 'http';
+import { serve } from '@hono/node-server';
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
 import { WebSocketServer } from 'ws';
-import { joinRoom, leaveRoom, broadcastToRoom, sendToSession, findSessionByWs, getRoomsSummary, getRoomPeers } from './room-manager.js';
+import { joinRoom, leaveRoom, broadcastToRoom, findSessionByWs, getRoomsSummary } from './room-manager.js';
 import { processOperation, resetSessionSequence } from './sync-engine.js';
 import { relayCursor, removeCursorSession } from './cursor-manager.js';
+import { auth } from './auth/better-auth-config.js';
+import users from './api/users.js';
+import communities from './api/communities.js';
+import channels from './api/channels.js';
 
 // --- Configuration ---
 const PORT = process.env.PORT || 3001;
-const HOST = process.env.HOST || '0.0.0.0'; // Bind to all interfaces
 const MAX_PAYLOAD_SIZE = 1024 * 512; // 512KB max message size
 
-// --- HTTP Server (for health checks) ---
-const httpServer = createServer((req, res) => {
-  // Enable CORS for health endpoint
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+const app = new Hono();
 
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
+// Middleware
+app.use('*', cors());
 
-  if (req.url === '/health' || req.url === '/') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: 'ok',
-      service: 'sync-canvas-server',
-      uptime: process.uptime(),
-      rooms: getRoomsSummary(),
-      timestamp: Date.now(),
-    }));
-    return;
-  }
+// Auth Routes (Better Auth)
+app.on(['POST', 'GET'], '/api/auth/*', (c) => auth.handler(c.req.raw));
 
-  res.writeHead(404, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ error: 'Not found' }));
+// API Routes
+app.route('/api/users', users);
+app.route('/api/communities', communities);
+app.route('/api/channels', channels);
+
+// Health Check
+app.get('/health', (c) => {
+  return c.json({
+    status: 'ok',
+    service: 'sync-canvas-server',
+    uptime: process.uptime(),
+    rooms: getRoomsSummary(),
+    timestamp: Date.now(),
+  });
 });
 
-// --- WebSocket Server ---
+app.get('/', (c) => c.text('SyncCanvas API is running'));
+
+// --- Start Server ---
+const server = serve({
+  fetch: app.fetch,
+  port: PORT,
+}, (info) => {
+  console.log(`\n╔═══════════════════════════════════════════╗`);
+  console.log(`║  SyncCanvas Backend (Hono)                ║`);
+  console.log(`║  Address: http://localhost:${info.port}         ║`);
+  console.log(`║  Health:  http://localhost:${info.port}/health  ║`);
+  console.log(`╚═══════════════════════════════════════════╝`);
+});
+
+// --- WebSocket Server Integration ---
 const wss = new WebSocketServer({
-  server: httpServer,
+  server,
   maxPayload: MAX_PAYLOAD_SIZE,
 });
 
 wss.on('connection', (ws, req) => {
   const clientIp = req.socket.remoteAddress;
-  console.log(`[server] New WebSocket connection from ${clientIp}`);
+  console.log(`[ws] New connection from ${clientIp}`);
 
   let joined = false;
 
-  // --- Message Handler ---
-  ws.on('message', (raw) => {
+  ws.on('message', async (raw) => {
     let message;
     try {
       message = JSON.parse(raw.toString());
     } catch (err) {
-      console.warn(`[server] Invalid JSON from ${clientIp}:`, err.message);
       ws.send(JSON.stringify({ type: 'error', error: 'Invalid JSON' }));
-      return;
-    }
-
-    if (!message.type || typeof message.type !== 'string') {
-      ws.send(JSON.stringify({ type: 'error', error: 'Message must have a "type" field' }));
       return;
     }
 
     switch (message.type) {
       case 'join':
-        handleJoin(ws, message);
+        await handleJoin(ws, message);
         joined = true;
         break;
       case 'op':
-        handleOp(ws, message);
+        await handleOp(ws, message);
         break;
       case 'cursor':
         handleCursor(ws, message);
@@ -93,147 +87,52 @@ wss.on('connection', (ws, req) => {
       case 'ping':
         ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
         break;
-      default:
-        ws.send(JSON.stringify({ type: 'error', error: `Unknown message type: ${message.type}` }));
-        break;
     }
   });
 
-  // --- Disconnect Handler ---
   ws.on('close', () => {
-    console.log(`[server] WebSocket disconnected from ${clientIp}`);
-
     if (joined) {
       const sessionInfo = findSessionByWs(ws);
       if (sessionInfo) {
         const { roomId, sessionId } = sessionInfo;
-        console.log(`[server] Session ${sessionId} left room ${roomId}`);
         removeCursorSession(sessionId);
         resetSessionSequence(sessionId);
         leaveRoom(roomId, sessionId);
       }
     }
   });
-
-  // --- Error Handler ---
-  ws.on('error', (err) => {
-    console.error(`[server] WebSocket error from ${clientIp}:`, err.message);
-  });
 });
 
-// ============================================================
-// Message Handler Implementations
-// ============================================================
-
-/**
- * Handle a 'join' message.
- * Protocol: See 02-websocket-protocol.md §1
- */
-function handleJoin(ws, message) {
+async function handleJoin(ws, message) {
   const roomId = (message.roomId || 'default').trim();
-  if (!roomId) {
-    ws.send(JSON.stringify({ type: 'error', error: 'roomId is required' }));
-    return;
-  }
-
   const existingSessionId = message.sessionId || null;
-
   try {
-    const { sessionId, elements, color, name } = joinRoom(roomId, ws, existingSessionId);
-    console.log(`[server] Session ${sessionId} joined room "${roomId}" with color ${color} and name ${name}`);
-
-    // Send room state and all active peers to the joining client
-    ws.send(JSON.stringify({
-      type: 'room_state',
-      sessionId,
-      elements,
-      color,
-      name,
-      peers: getRoomPeers(roomId)
-    }));
-
-    // Notify existing peers about the new user and their color/name
-    broadcastToRoom(roomId, {
-      type: 'peer_joined',
-      sessionId,
-      color,
-      name
-    }, sessionId);
+    const { sessionId, elements } = await joinRoom(roomId, ws, existingSessionId);
+    ws.send(JSON.stringify({ type: 'room_state', sessionId, elements }));
+    broadcastToRoom(roomId, { type: 'peer_joined', sessionId }, sessionId);
   } catch (err) {
-    console.error(`[server] Error joining room "${roomId}":`, err.message);
+    console.error(`[ws] Join error:`, err);
     ws.send(JSON.stringify({ type: 'error', error: 'Failed to join room' }));
   }
 }
 
-/**
- * Handle an 'op' (operation) message.
- * Validates, applies CRDT logic, and broadcasts to peers.
- * Protocol: See 02-websocket-protocol.md §2
- */
-function handleOp(ws, message) {
+async function handleOp(ws, message) {
   const sessionInfo = findSessionByWs(ws);
-  if (!sessionInfo) {
-    ws.send(JSON.stringify({ type: 'error', error: 'Must join a room before sending operations' }));
-    return;
-  }
-
+  if (!sessionInfo) return;
   const { roomId, sessionId } = sessionInfo;
-  const op = message.op;
-
-  if (!op) {
-    ws.send(JSON.stringify({ type: 'error', error: 'Operation payload (op) is required' }));
-    return;
-  }
-
-  const result = processOperation(roomId, op);
-
+  const result = await processOperation(roomId, message.op);
   if (result.valid) {
-    // Broadcast the operation to other peers (not the sender)
     if (result.broadcastOp) {
-      broadcastToRoom(roomId, {
-        type: 'op',
-        op: result.broadcastOp,
-      }, sessionId);
+      broadcastToRoom(roomId, { type: 'op', op: result.broadcastOp }, sessionId);
     }
-
-    // Acknowledge to sender (for reliability tracking)
-    ws.send(JSON.stringify({
-      type: 'op_ack',
-      elementId: op.elementId,
-      sequence: op.sequence,
-      timestamp: op.timestamp,
-    }));
+    ws.send(JSON.stringify({ type: 'op_ack', elementId: message.op.elementId, sequence: message.op.sequence }));
   } else {
-    // Send error back to sender
-    ws.send(JSON.stringify({
-      type: 'op_error',
-      elementId: op.elementId,
-      sequence: op.sequence,
-      error: result.error,
-    }));
+    ws.send(JSON.stringify({ type: 'op_error', error: result.error }));
   }
 }
 
-/**
- * Handle a 'cursor' message.
- * Relays cursor position to other peers with throttling.
- * Protocol: See 02-websocket-protocol.md §3
- */
 function handleCursor(ws, message) {
   const sessionInfo = findSessionByWs(ws);
-  if (!sessionInfo) return; // Silently ignore cursors from unjoined sockets
-
+  if (!sessionInfo) return;
   relayCursor(sessionInfo.roomId, message, sessionInfo.sessionId);
 }
-
-// ============================================================
-// Start Server
-// ============================================================
-httpServer.listen(PORT, HOST, () => {
-  console.log(`\n╔═══════════════════════════════════════════╗`);
-  console.log(`║  SyncCanvas Sync Server                   ║`);
-  console.log(`║  WebSocket: ws://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}         ║`);
-  console.log(`║  Health:    http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}/health   ║`);
-  console.log(`╚═══════════════════════════════════════════╝`);
-  console.log(`[server] Ready to accept connections`);
-});
