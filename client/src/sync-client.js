@@ -27,11 +27,13 @@ class SyncClient {
     this._cursorThrottle = false;
     this._pendingCursor = null;
 
-    // Generate a random color for this session
+    // User profile assigned by server
     this.color = this._randomColor();
+    this.name = 'Anonymous';
 
     // Peer tracking
     this._peerSessionIds = new Set();
+    this.peers = new Map(); // sessionId -> { color, name }
 
     // Connection retry
     this._shouldReconnect = true;
@@ -132,10 +134,26 @@ class SyncClient {
     switch (msg.type) {
       case 'room_state':
         this.sessionId = msg.sessionId;
+        this.color = msg.color || this.color;
+        this.name = msg.name || 'Anonymous';
+        
+        // Track current peers
+        this.peers.clear();
+        this._peerSessionIds.clear();
+        if (msg.peers) {
+          for (const peer of msg.peers) {
+            if (peer.sessionId !== this.sessionId) {
+              this.peers.set(peer.sessionId, { color: peer.color, name: peer.name });
+              this._peerSessionIds.add(peer.sessionId);
+            }
+          }
+        }
+        
         // Show session ID in UI
         const sessEl = document.getElementById('session-id-label');
         if (sessEl) sessEl.textContent = `Room: default | ID: ${this.sessionId.slice(0, 8)}...`;
         if (this.onRoomState) this.onRoomState(msg.elements || []);
+        this._updatePeerCount();
         break;
 
       case 'op':
@@ -147,12 +165,15 @@ class SyncClient {
         break;
 
       case 'peer_joined': {
+        this.peers.set(msg.sessionId, { color: msg.color, name: msg.name });
         this._peerSessionIds.add(msg.sessionId);
         this._updatePeerCount();
+        if (this.onPeerJoined) this.onPeerJoined({ sessionId: msg.sessionId, color: msg.color, name: msg.name });
         break;
       }
 
       case 'peer_left':
+        this.peers.delete(msg.sessionId);
         this._peerSessionIds.delete(msg.sessionId);
         this._updatePeerCount();
         if (this.onPeerLeft) this.onPeerLeft(msg.sessionId);
@@ -202,7 +223,8 @@ class SyncClient {
       type: 'cursor',
       x, y,
       sessionId: this.sessionId,
-      color: this.color
+      color: this.color,
+      name: this.name
     });
     setTimeout(() => {
       this._cursorThrottle = false;

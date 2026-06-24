@@ -15,7 +15,7 @@ class CanvasRenderer {
 
     // Drawing style
     this.currentTool = 'select';
-    this.strokeColor = '#ffffff';
+    this.strokeColor = '#23251d';
     this.fillColor = null;
     this.strokeWidth = 3;
 
@@ -397,25 +397,21 @@ class CanvasRenderer {
   }
 
   _drawGrid(ctx, w, h) {
-    const gridSize = 40 * this.zoom;
-    if (gridSize < 5) return; // Too zoomed out
+    const gridSize = 32 * this.zoom;
+    if (gridSize < 8) return; // Too zoomed out
 
     const offsetX = (this.offsetX + w / 2) % gridSize;
     const offsetY = (this.offsetY + h / 2) % gridSize;
 
-    ctx.strokeStyle = '#1a2332';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-
+    ctx.fillStyle = 'var(--color-hairline-gray)';
+    
     for (let x = offsetX; x < w; x += gridSize) {
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
+      for (let y = offsetY; y < h; y += gridSize) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.25, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
-    for (let y = offsetY; y < h; y += gridSize) {
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-    }
-    ctx.stroke();
   }
 
   _drawElement(ctx, el) {
@@ -535,7 +531,7 @@ class CanvasRenderer {
 
   _drawTextBounds(ctx, el) {
     if (this.selectedElementId === el.id) {
-      ctx.strokeStyle = el.props.stroke || '#00b4d8';
+      ctx.strokeStyle = el.props.stroke || '#466cf3';
       ctx.lineWidth = 1;
       ctx.setLineDash([4, 4]);
       ctx.strokeRect(el.x, el.y, el.width, el.height);
@@ -544,7 +540,7 @@ class CanvasRenderer {
   }
 
   _drawSelectionHandles(ctx, el) {
-    ctx.strokeStyle = '#00b4d8';
+    ctx.strokeStyle = '#466cf3';
     ctx.lineWidth = 2 / this.zoom;
     ctx.setLineDash([4 / this.zoom, 4 / this.zoom]);
 
@@ -578,7 +574,7 @@ class CanvasRenderer {
     ];
 
     ctx.fillStyle = '#ffffff';
-    ctx.strokeStyle = '#00b4d8';
+    ctx.strokeStyle = '#466cf3';
     ctx.lineWidth = 2 / this.zoom;
     for (const [hx, hy] of handles) {
       ctx.fillRect(hx - handleSize / 2, hy - handleSize / 2, handleSize, handleSize);

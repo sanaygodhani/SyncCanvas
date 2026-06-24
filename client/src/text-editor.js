@@ -120,8 +120,6 @@ class TextEditor {
   removeEditor(elementId) {
     const entry = this._editors.get(elementId);
     if (entry) {
-      entry.div.removeEventListener('input', null);
-      entry.div.removeEventListener('blur', null);
       entry.div.remove();
       this._editors.delete(elementId);
     }

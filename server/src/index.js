@@ -13,7 +13,7 @@
 
 import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
-import { joinRoom, leaveRoom, broadcastToRoom, sendToSession, findSessionByWs, getRoomsSummary } from './room-manager.js';
+import { joinRoom, leaveRoom, broadcastToRoom, sendToSession, findSessionByWs, getRoomsSummary, getRoomPeers } from './room-manager.js';
 import { processOperation, resetSessionSequence } from './sync-engine.js';
 import { relayCursor, removeCursorSession } from './cursor-manager.js';
 
@@ -139,20 +139,25 @@ function handleJoin(ws, message) {
   const existingSessionId = message.sessionId || null;
 
   try {
-    const { sessionId, elements } = joinRoom(roomId, ws, existingSessionId);
-    console.log(`[server] Session ${sessionId} joined room "${roomId}"`);
+    const { sessionId, elements, color, name } = joinRoom(roomId, ws, existingSessionId);
+    console.log(`[server] Session ${sessionId} joined room "${roomId}" with color ${color} and name ${name}`);
 
-    // Send room state to the joining client
+    // Send room state and all active peers to the joining client
     ws.send(JSON.stringify({
       type: 'room_state',
       sessionId,
       elements,
+      color,
+      name,
+      peers: getRoomPeers(roomId)
     }));
 
-    // Notify existing peers
+    // Notify existing peers about the new user and their color/name
     broadcastToRoom(roomId, {
       type: 'peer_joined',
       sessionId,
+      color,
+      name
     }, sessionId);
   } catch (err) {
     console.error(`[server] Error joining room "${roomId}":`, err.message);

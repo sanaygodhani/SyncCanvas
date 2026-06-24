@@ -10,7 +10,7 @@ class CursorManager {
   }
 
   /** Update or create a remote cursor */
-  updateCursor(sessionId, x, y, color) {
+  updateCursor(sessionId, x, y, color, name) {
     let entry = this._cursors.get(sessionId);
 
     if (!entry) {
@@ -21,7 +21,7 @@ class CursorManager {
       // Simple triangle cursor shape
       cursorEl.innerHTML = `
         <svg width="12" height="16" viewBox="0 0 12 16">
-          <polygon points="2,2 10,10 6,10 8,14 6,14 4,10 2,10" fill="${color || '#ffffff'}" stroke="rgba(0,0,0,0.4)" stroke-width="0.5"/>
+          <polygon points="2,2 10,10 6,10 8,14 6,14 4,10 2,10" fill="${color || '#ffffff'}" stroke="none"/>
         </svg>
       `;
 
@@ -29,12 +29,12 @@ class CursorManager {
       label.className = 'remote-cursor-label';
       label.style.background = color || '#ffffff';
       label.style.color = '#000000';
-      label.textContent = sessionId.slice(0, 6);
+      label.textContent = name || sessionId.slice(0, 6);
 
       this.cursorLayer.appendChild(cursorEl);
       this.cursorLayer.appendChild(label);
 
-      entry = { div: cursorEl, label, color };
+      entry = { div: cursorEl, label, color, name };
       this._cursors.set(sessionId, entry);
     }
 
@@ -42,7 +42,12 @@ class CursorManager {
     entry.div.style.transform = `translate(${x}px, ${y}px)`;
     entry.label.style.transform = `translate(${x}px, ${y + 18}px)`;
 
-    // Update color if changed
+    // Update name/color if changed
+    if (name && name !== entry.name) {
+      entry.name = name;
+      entry.label.textContent = name;
+    }
+
     if (color && color !== entry.color) {
       entry.color = color;
       entry.label.style.background = color;

@@ -3,93 +3,152 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SyncCanvas — Collaborative Whiteboard</title>
+  <title>SyncCanvas — Collaborative Sketchpad</title>
+  <!-- Google Fonts for Poppins & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&family=Poppins:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Toolbar -->
-  <div id="toolbar">
-    <div class="toolbar-group" id="tool-group">
-      <button class="tool-btn active" data-tool="select" title="Select (V)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
-      </button>
-      <button class="tool-btn" data-tool="pen" title="Pen (P)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-      </button>
-      <button class="tool-btn" data-tool="rect" title="Rectangle (R)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-      </button>
-      <button class="tool-btn" data-tool="ellipse" title="Ellipse (E)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="8"/></svg>
-      </button>
-      <button class="tool-btn" data-tool="arrow" title="Arrow (A)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="12 5 19 5 19 12"/></svg>
-      </button>
-      <button class="tool-btn" data-tool="text" title="Text (T)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
-      </button>
-      <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3l12 12-8 8-12-12 8-8z"/><path d="M21 21H7"/></svg>
-      </button>
+
+  <!-- Floating Navigation Bar Card -->
+  <header id="site-nav" class="aaply-nav-card">
+    <div class="logo-group">
+      <!-- Rounded square logo mark + Poppins Wordmark -->
+      <span class="logo-mark">
+        <span class="logo-glyph">A</span>
+      </span>
+      <span class="logo-text">SyncCanvas</span>
     </div>
 
-    <div class="toolbar-separator"></div>
-
-    <div class="toolbar-group" id="style-group">
-      <label class="style-label" title="Stroke color">
-        <span class="label-text">Color</span>
-        <input type="color" id="color-picker" value="#ffffff">
-      </label>
-      <label class="style-label" title="Stroke width">
-        <span class="label-text">Width</span>
-        <input type="range" id="stroke-width" min="1" max="20" value="3">
-        <span id="stroke-width-value">3</span>
-      </label>
-      <label class="style-label" title="Fill color">
-        <span class="label-text">Fill</span>
-        <input type="color" id="fill-picker" value="transparent">
-        <button id="fill-toggle" class="tiny-btn" title="Toggle fill">∅</button>
-      </label>
+    <!-- The Emoji-In-Headline Pattern (Compact Header Title) -->
+    <div class="site-headline">
+      Draw <span class="headline-emoji">⚡️</span> collaborate <span class="headline-emoji">🎨</span> sketch.
     </div>
 
-    <div class="toolbar-separator"></div>
+    <div class="nav-right-group">
+      <!-- Avatar Stack for Active Collaboration -->
+      <div id="avatar-stack" class="avatar-stack" title="Collaborators active now">
+        <!-- Rendered dynamically by app.js -->
+      </div>
+      
+      <!-- Yellow-Black Pill Button Pair for Conversion Moment -->
+      <div class="nav-actions">
+        <button id="btn-fit-nav" class="btn-yellow-pill" onclick="window.app.canvas.fitToScreen()">Fit ⊡</button>
+        <button id="btn-delete-nav" class="btn-black-pill" onclick="document.dispatchEvent(new CustomEvent('delete-selected'))">Delete ✕</button>
+      </div>
+    </div>
+  </header>
 
-    <div class="toolbar-group" id="canvas-actions">
-      <button class="action-btn" id="btn-undo" title="Undo (Ctrl+Z)">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
-      </button>
-      <button class="action-btn" id="btn-redo" title="Redo (Ctrl+Shift+Z)">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-      </button>
-      <button class="action-btn" id="btn-zoom-in" title="Zoom In">+</button>
-      <span id="zoom-level">100%</span>
-      <button class="action-btn" id="btn-zoom-out" title="Zoom Out">−</button>
-      <button class="action-btn" id="btn-fit" title="Fit to screen">⊡</button>
+  <!-- Main Digital Sketchpad Card Container -->
+  <main id="sketchpad" class="sketchpad-card">
+    <!-- Browser-style window chrome (Aaply mockup frame) -->
+    <div class="window-chrome">
+      <div class="chrome-dots">
+        <span class="chrome-dot red"></span>
+        <span class="chrome-dot yellow"></span>
+        <span class="chrome-dot blue"></span>
+      </div>
+      <div class="chrome-address">
+        <svg class="address-lock" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <span class="address-val">https://canvas.aaply.app/room/default</span>
+      </div>
+      <div id="session-info" class="chrome-session">
+        <span id="connection-status" class="status-disconnected">●</span>
+        <span id="session-id-label">Room: default</span>
+        <span id="peer-count" class="peer-count-pill">0 peers</span>
+      </div>
     </div>
 
-    <div class="toolbar-separator"></div>
+    <!-- Whiteboard Canvas Drawing Workspace -->
+    <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+      <div id="text-layer"></div>
+      <div id="cursor-layer"></div>
 
-    <div id="session-info">
-      <span id="connection-status" class="status-disconnected">●</span>
-      <span id="session-id-label">Room: default</span>
-      <span id="peer-count">0 peers</span>
+      <!-- Floating Properties Panel Card (Floating in top-right) -->
+      <div id="style-panel" class="floating-properties-card">
+        <div class="style-row">
+          <label class="style-item" title="Stroke Color">
+            <span class="style-title">Stroke</span>
+            <input type="color" id="color-picker" value="#000000">
+          </label>
+          <label class="style-item" title="Fill Color">
+            <span class="style-title">Fill</span>
+            <input type="color" id="fill-picker" value="#ffffff">
+            <button id="fill-toggle" class="fill-none-btn" title="Toggle Transparent">∅</button>
+          </label>
+        </div>
+        <div class="style-divider"></div>
+        <div class="style-row">
+          <label class="style-item wide" title="Stroke Width">
+            <span class="style-title">Width</span>
+            <input type="range" id="stroke-width" min="1" max="20" value="3">
+            <span id="stroke-width-value" class="style-val">3</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Floating Tool Options Pill (Floating in bottom-center) -->
+      <div id="toolbar" class="floating-toolbar-pill">
+        <div class="toolbar-section">
+          <button class="tool-btn active" data-tool="select" title="Select (V)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="pen" title="Pen (P)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="rect" title="Rectangle (R)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="ellipse" title="Ellipse (E)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="12" rx="10" ry="8"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="arrow" title="Arrow (A)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="19" x2="19" y2="5"/><polyline points="12 5 19 5 19 12"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="text" title="Text (T)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
+          </button>
+          <button class="tool-btn" data-tool="eraser" title="Eraser (E)">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3l12 12-8 8-12-12 8-8z"/><path d="M21 21H7"/></svg>
+          </button>
+        </div>
+
+        <div class="toolbar-sep"></div>
+
+        <div class="toolbar-section">
+          <button class="action-btn" id="btn-undo" title="Undo (Ctrl+Z)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+          </button>
+          <button class="action-btn" id="btn-redo" title="Redo (Ctrl+Shift+Z)">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          </button>
+          <div class="zoom-controls">
+            <button class="action-btn" id="btn-zoom-out" title="Zoom Out">−</button>
+            <span id="zoom-level">100%</span>
+            <button class="action-btn" id="btn-zoom-in" title="Zoom In">+</button>
+          </div>
+          <button class="action-btn" id="btn-fit" title="Fit to screen">⊡</button>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <!-- Canvas Container -->
-  <div id="canvas-container">
-    <canvas id="canvas"></canvas>
-    <div id="text-layer"></div>
-    <div id="cursor-layer"></div>
-  </div>
+    <!-- Status Bar at the bottom of the sketchpad -->
+    <div id="status-bar" class="sketchpad-status">
+      <div class="status-left">
+        <span class="status-indicator">Tool: <strong id="tool-name">Select</strong></span>
+        <span class="status-indicator">Coords: <strong id="canvas-coords">0, 0</strong></span>
+      </div>
+      <div id="notification">Ready</div>
+    </div>
+  </main>
 
-  <!-- Status bar -->
-  <div id="status-bar">
-    <span id="tool-name">Select</span>
-    <span id="canvas-coords">0, 0</span>
-    <span id="notification"></span>
-  </div>
-
+  <!-- JS Modules -->
   <script type="module" src="src/sync-client.js"></script>
   <script type="module" src="src/toolbar.js"></script>
   <script type="module" src="src/canvas-renderer.js"></script>

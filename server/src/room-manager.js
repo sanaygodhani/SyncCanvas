@@ -12,8 +12,68 @@
 import { v4 as uuidv4 } from 'uuid';
 import { initRoom, getElements, clearRoom } from './store.js';
 
-// Room state: Map<roomId, { id, sessions: Map<sessionId, ws>, createdAt, lastActivity }>
+// Room state: Map<roomId, { id, sessions: Map<sessionId, ws>, sessionsMetadata: Map<sessionId, {color, name}>, createdAt, lastActivity }>
 const rooms = new Map();
+
+// Curated palette of distinct colors (excluding yellow to avoid clashing with brand theme colors)
+const COLLAB_COLORS = [
+  '#466cf3', // Signal Blue
+  '#f34646', // Annotation Red
+  '#ff8562', // Peach Wash
+  '#10ac84', // Emerald Green
+  '#5f27cd', // Electric Purple
+  '#ff9f43', // Orange Sun
+  '#00d2d3', // Bright Teal
+  '#f368e0', // Hot Pink
+  '#ee5a24', // Red-Orange
+  '#0abde3'  // Sky Blue
+];
+
+const ADJECTIVES = [
+  'Creative', 'Electric', 'Signal', 'Peach', 'Sunbeam', 'Carbon', 'Curious', 'Active', 'Daring', 'Bright', 'Clever', 'Quick'
+];
+
+const ANIMAL_NAMES = [
+  'Sloth', 'Fox', 'Koala', 'Panda', 'Otter', 'Badger', 'Rabbit', 'Owl', 'Beaver', 'Falcon', 'Deer', 'Puffin'
+];
+
+/**
+ * Assign a unique color and adjective-animal name combination.
+ */
+function assignColorAndName(room) {
+  const activeColors = new Set();
+  const activeNames = new Set();
+  for (const meta of room.sessionsMetadata.values()) {
+    activeColors.add(meta.color);
+    activeNames.add(meta.name);
+  }
+
+  // Find first unused color
+  let color = COLLAB_COLORS.find(c => !activeColors.has(c));
+  if (!color) {
+    // Cycle colors if all are taken
+    color = COLLAB_COLORS[room.sessionsMetadata.size % COLLAB_COLORS.length];
+  }
+
+  // Find a unique name
+  let name = '';
+  let attempts = 0;
+  while (attempts < 100) {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const animal = ANIMAL_NAMES[Math.floor(Math.random() * ANIMAL_NAMES.length)];
+    const candidateName = `${adj} ${animal}`;
+    if (!activeNames.has(candidateName)) {
+      name = candidateName;
+      break;
+    }
+    attempts++;
+  }
+  if (!name) {
+    name = `Designer ${room.sessionsMetadata.size + 1}`;
+  }
+
+  return { color, name };
+}
 
 /**
  * Create a new room (or return existing one).
@@ -28,6 +88,7 @@ export function createRoom(roomId) {
   const room = {
     id: roomId,
     sessions: new Map(),
+    sessionsMetadata: new Map(),
     createdAt: Date.now(),
     lastActivity: Date.now(),
   };
@@ -53,12 +114,23 @@ export function joinRoom(roomId, ws, existingSessionId) {
 
   // Store the WebSocket reference keyed by sessionId
   room.sessions.set(sessionId, ws);
+
+  // Assign and store unique color/name profile
+  if (!room.sessionsMetadata.has(sessionId)) {
+    const profile = assignColorAndName(room);
+    room.sessionsMetadata.set(sessionId, profile);
+  }
+
   room.lastActivity = Date.now();
+
+  const profile = room.sessionsMetadata.get(sessionId);
 
   return {
     room,
     sessionId,
     elements: getElements(roomId),
+    color: profile.color,
+    name: profile.name
   };
 }
 
@@ -73,6 +145,7 @@ export function leaveRoom(roomId, sessionId) {
   if (!room) return false;
 
   room.sessions.delete(sessionId);
+  room.sessionsMetadata.delete(sessionId);
   room.lastActivity = Date.now();
 
   // Broadcast that this peer left
@@ -89,6 +162,26 @@ export function leaveRoom(roomId, sessionId) {
   }
 
   return true; // room still active
+}
+
+/**
+ * Get all active peers in a room.
+ * @param {string} roomId
+ * @returns {Array<{sessionId: string, color: string, name: string}>}
+ */
+export function getRoomPeers(roomId) {
+  const room = rooms.get(roomId);
+  if (!room) return [];
+  const peers = [];
+  for (const [sessionId, ws] of room.sessions.entries()) {
+    const profile = room.sessionsMetadata.get(sessionId) || { color: '#000000', name: 'Unknown' };
+    peers.push({
+      sessionId,
+      color: profile.color,
+      name: profile.name
+    });
+  }
+  return peers;
 }
 
 /**
