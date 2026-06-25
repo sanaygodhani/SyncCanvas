@@ -5,8 +5,7 @@
 
 class SyncCanvasApp {
   constructor() {
-    const wsHost = window.location.hostname || 'localhost';
-    this.sync = new SyncClient(`ws://${wsHost}:3001`);
+    this.sync = new SyncClient('ws://localhost:3001');
     this.canvas = new CanvasRenderer(document.getElementById('canvas'));
     this.toolbar = new Toolbar();
     this.textEditor = new TextEditor(document.getElementById('text-layer'));
@@ -124,19 +123,6 @@ class SyncCanvasApp {
       this.canvas.setElements(elements);
       this.textEditor.syncWithElements(elements);
       this._showNotification(`Loaded ${elements.length} elements`);
-      
-      // Update local color picker and canvas default color to server-assigned color
-      if (this.sync.color) {
-        const cp = document.getElementById('color-picker');
-        if (cp) {
-          cp.value = this.sync.color;
-          this.canvas.strokeColor = this.sync.color;
-          this.toolbar.strokeColor = this.sync.color;
-        }
-      }
-      
-      // Update the avatar stack UI
-      this._updateAvatarStack();
     };
 
     this.sync.onOperation = (op) => {
@@ -161,25 +147,18 @@ class SyncCanvasApp {
     this.sync.onCursorMove = (msg) => {
       // Skip our own cursor
       if (msg.sessionId === this.sync.sessionId) return;
-      this.cursors.updateCursor(msg.sessionId, msg.x, msg.y, msg.color, msg.name);
-    };
-
-    this.sync.onPeerJoined = (peer) => {
-      this._updateAvatarStack();
-      this._showNotification(`${peer.name} joined`);
+      this.cursors.updateCursor(msg.sessionId, msg.x, msg.y, msg.color);
     };
 
     this.sync.onPeerLeft = (sessionId) => {
-      const peer = this.sync.peers.get(sessionId);
-      const name = peer ? peer.name : 'A peer';
+      this._peerSessions.delete(sessionId);
       this.cursors.removeCursor(sessionId);
-      this._updateAvatarStack();
-      this._showNotification(`${name} left`);
+      const infoEl = document.getElementById('peer-count');
+      if (infoEl) infoEl.textContent = `${this._peerSessions.size} peers`;
     };
 
     this.sync.onPeerCount = (count) => {
-      const badge = document.getElementById('sidebar-peer-badge');
-      if (badge) badge.textContent = count;
+      // Track peer sessions via peer_joined/peer_left messages
     };
 
     // ===== Mouse events on canvas =====
@@ -396,46 +375,9 @@ class SyncCanvasApp {
     }
     console.log('[SyncCanvas]', msg);
   }
-
-  _updateAvatarStack() {
-    const container = document.getElementById('avatar-stack');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    // Add local user avatar first
-    if (this.sync.sessionId) {
-      const localAvatar = document.createElement('div');
-      localAvatar.className = 'avatar-circle';
-      localAvatar.style.backgroundColor = this.sync.color;
-      const name = this.sync.name || 'Anonymous';
-      localAvatar.textContent = name.charAt(0).toUpperCase();
-      localAvatar.title = `${name} (You)`;
-      container.appendChild(localAvatar);
-    }
-
-    // Add all other active peers
-    for (const [id, peer] of this.sync.peers.entries()) {
-      const peerAvatar = document.createElement('div');
-      peerAvatar.className = 'avatar-circle';
-      peerAvatar.style.backgroundColor = peer.color;
-      const name = peer.name || 'Anonymous';
-      peerAvatar.textContent = name.charAt(0).toUpperCase();
-      peerAvatar.title = name;
-      container.appendChild(peerAvatar);
-    }
-  }
 }
 
 // Boot the app when DOM is ready
-function boot() {
-  if (!window.app) {
-    window.app = new SyncCanvasApp();
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', boot);
-} else {
-  boot();
-}
+document.addEventListener('DOMContentLoaded', () => {
+  window.app = new SyncCanvasApp();
+});

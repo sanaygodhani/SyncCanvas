@@ -6,7 +6,7 @@
 class Toolbar {
   constructor() {
     this.currentTool = 'select';
-    this.strokeColor = '#23251d';
+    this.strokeColor = '#ffffff';
     this.fillColor = null; // null = no fill
     this.strokeWidth = 3;
     this.fontSize = 16;
@@ -173,9 +173,8 @@ class Toolbar {
   }
 
   on(event, callback) {
-    const key = 'on' + event.charAt(0).toUpperCase() + event.slice(1);
-    if (key in this._callbacks) {
-      this._callbacks[key] = callback;
+    if (event in this._callbacks) {
+      this._callbacks[event] = callback;
     }
   }
 }

@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-discord-divider;
+  }
+
+  body {
+    @apply bg-discord-dark text-gray-100 font-sans overflow-hidden;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-discord-muted-more/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-discord-muted-more/50;
+  }
+}
+
+@layer components {
+  .sidebar-icon {
+    @apply w-12 h-12 rounded-2xl bg-discord-surface flex items-center justify-center 
+           text-discord-muted cursor-pointer transition-all duration-150
+           hover:rounded-xl hover:bg-blurple hover:text-white;
+  }
+
+  .sidebar-icon-active {
+    @apply rounded-xl bg-blurple text-white;
+  }
+
+  .sidebar-icon-selected {
+    @apply rounded-xl bg-blurple text-white;
+  }
+
+  .channel-item {
+    @apply flex items-center gap-1.5 px-2 py-1 mx-2 rounded cursor-pointer
+           text-discord-muted hover:text-gray-100 hover:bg-discord-surface-hover
+           transition-colors duration-100 text-sm font-normal;
+  }
+
+  .channel-item-active {
+    @apply text-white bg-discord-surface-active;
+  }
+
+  .category-header {
+    @apply flex items-center justify-between px-2 pt-4 pb-1 text-xs font-semibold
+           text-discord-muted uppercase tracking-wide cursor-pointer
+           hover:text-gray-100 transition-colors duration-150;
+  }
+
+  .user-panel {
+    @apply bg-discord-sidebar px-2 py-2 flex items-center gap-2
+           border-t border-discord-divider;
+  }
+
+  .content-header {
+    @apply h-12 px-4 flex items-center border-b border-discord-divider
+           bg-discord-bg shadow-sm;
+  }
+}
+
+/* Discord-style pill indicator */
+.pill-indicator {
+  @apply absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8
+         bg-white rounded-r-full transition-all duration-200;
+}
+
+.pill-indicator-inactive {
+  @apply h-2 -translate-y-1/2 scale-0;
+}
+
+/* Server icon unread badge */
+.unread-badge {
+  @apply absolute -top-0.5 -right-0.5 w-5 h-5 bg-red-500 rounded-full
+         flex items-center justify-center text-[10px] font-bold text-white
+         border-2 border-discord-channels;
+}
